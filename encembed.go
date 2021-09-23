@@ -12,10 +12,13 @@ import (
 )
 
 type encembedtpl struct {
-	PkgName   string
-	FuncName  string
-	Key       string
-	EmbedName string
+	PkgName          string
+	FuncName         string
+	Key              string
+	EmbedName        string
+	EncryptedVarName string
+	DecryptedVarName string
+	ExternalKey      string
 }
 
 func main() {
@@ -25,7 +28,14 @@ func main() {
 	ofsrcname := flag.String("srcname", "zencembed.go", "source file name to create")
 	flag.StringVar(&cfg.FuncName, "funcname", "embedded", "name of function to return decrypted input file")
 	flag.StringVar(&cfg.PkgName, "pkgname", "main", "name of package for source file to output")
+	flag.StringVar(&cfg.EncryptedVarName, "encvarname", "cryptembed", "variable name for encrypted resource")
+	flag.StringVar(&cfg.DecryptedVarName, "decvarname", "", "variable name to use for decrypted resource (if you don't want to access it via the function)")
+	flag.StringVar(&cfg.ExternalKey, "extkey", "", "do not embed the key in the binary (writes to specified filename)")
 	flag.Parse()
+
+	if cfg.ExternalKey != "" && cfg.DecryptedVarName != "" {
+		panic("external key and simple var access incompatible")
+	}
 
 	cfg.Key = keyGen()
 	inf, err := os.Open(*infname)
@@ -62,6 +72,14 @@ func main() {
 		panic(err)
 	}
 	srcf.Close()
+	if cfg.ExternalKey != "" {
+		kf, err := os.Create(cfg.ExternalKey)
+		if err != nil {
+			panic(err)
+		}
+		kf.WriteString(cfg.Key)
+		kf.Close()
+	}
 
 }
 
@@ -76,13 +94,14 @@ import(
 )
 
 //go:embed {{.EmbedName}}
-var emb []byte
-func {{.FuncName}}() []byte {
-	i, _ := age.NewScryptIdentity("{{.Key}}")
-	r, _ := age.Decrypt(bytes.NewReader(emb), i)
+var {{.EncryptedVarName}} []byte
+func {{.FuncName}}({{if .ExternalKey}}key string{{end}}) []byte {
+	i, _ := age.NewScryptIdentity({{if .ExternalKey}}key{{else}}"{{.Key}}"{{end}})
+	r, _ := age.Decrypt(bytes.NewReader({{.EncryptedVarName}}), i)
 	a, _ := io.ReadAll(r)
 	return a
 }
+{{if .DecryptedVarName}}var {{.DecryptedVarName}} = {{.FuncName}}() {{end}}
 `
 
 func keyGen() string {
