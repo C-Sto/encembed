@@ -1,6 +1,7 @@
 package encembed
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"io"
@@ -33,11 +34,13 @@ type Config struct {
 func Embed(cfg Config, byts []byte) error {
 	var inf io.Reader
 	var err error
-	if byts == nil {
+	if len(byts) == 0 {
 		inf, err = os.Open(cfg.Infile)
 		if err != nil {
 			return err
 		}
+	} else {
+		inf = bytes.NewReader(byts)
 	}
 
 	of, err := os.Create(cfg.EmbedName)
